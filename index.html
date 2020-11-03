@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Scene Graph Demo</title>
+		<meta charset="UTF-8">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+		<link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+		<script src='jquery-sortable-min.js'></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r122/three.min.js"></script>
+		<script src="OrbitControls.js"></script>
+		<script>
+			var GraphGroup;
+			var MovingGeometry = [];
+			var clock = new THREE.Clock();
+		
+			function ValueChanged(Element, PropertyName){
+				$(Element).parent().data(PropertyName, Element.value);
+				Render();
+			}
+			
+			$(document).ready(function() {
+				window.GraphGroup = $("#SceneGraph").sortable({
+					group: 'serialization',
+					onDrop: function ($item, container, _super) {
+						Render();
+						_super($item, container);
+					},
+					onDragStart: function ($item, container, _super) {
+						if(!container.options.drop){
+							$item.clone(true).insertAfter($item);
+							$item.children('input').each(function () {
+								$(this).removeAttr("disabled");
+							});
+							$item.children('.deleter').each(function () {
+								$(this).removeAttr("hidden");
+							});
+							
+							if($item.data("type") == "sphere" || $item.data("type") == "cube"){
+								var color = "#" + new THREE.Color().setHSL(Math.random(), 0.5, 0.75).getHexString();
+								$item.children("span.icon").first().css("background", color);
+								$item.data("color", color);
+							}
+						}
+						_super($item, container);
+					}
+				});
+				
+				var PartsGroup = $("#Parts").sortable({
+					group: 'serialization',
+					drop: false
+				});
+				
+				InitThreeJS();
+				Render();
+			});
+			
+			window
+
+			function onWindowResize(){
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+			
+			function InitThreeJS(){
+				const canvas = document.querySelector('#RenderedView');
+				window.ThreeJSScene = new THREE.Scene();
+				var camera = new THREE.PerspectiveCamera(70, $("#RenderedView").width()/$("#RenderedView").height(), 0.1, 1000);
+				camera.position.z = 10;
+				camera.position.y = 10;
+
+				var renderer = new THREE.WebGLRenderer({canvas, antialias : true});
+				renderer.setSize($("#RenderedView").width(), $("#RenderedView").height());
+				$(window).resize(function(){
+					camera.aspect = $("#RenderedView").width()/$("#RenderedView").height();
+					camera.updateProjectionMatrix();
+
+					renderer.setSize($("#RenderedView").width(), $("#RenderedView").height());
+				});
+				
+				const controls = new THREE.OrbitControls( camera, renderer.domElement );
+				
+				var render = function () {
+					requestAnimationFrame(render);
+					
+					var DeltaTime = clock.getDelta();
+					MovingGeometry.forEach(function(entry) {
+						entry.object.rotation.y += THREE.Math.DEG2RAD * (DeltaTime * entry.speed);
+					});
+					
+					controls.update();
+
+					renderer.render(ThreeJSScene, camera);
+				};
+
+				render();
+			}
+			
+			function Axis(Color, Rotation, Length, OffsetComponent){
+				const geometry = new THREE.CylinderGeometry( 0.02, 0.02, Length, 4 );
+				const material = new THREE.MeshBasicMaterial( {color: Color} );
+				var axis = new THREE.Mesh( geometry, material );
+				axis.rotation.set(Rotation.x, Rotation.y, Rotation.z);
+				axis.position.setComponent(OffsetComponent, Length/2);
+				return axis;
+			}
+			
+			function SceneSetup(SceneGraph){
+				var scene = new THREE.Scene();
+				var RotatingParts = [];
+				
+				scene.add( Axis(0xff0000, new THREE.Vector3(0,0,Math.PI/2), 2, 0)); //X
+				scene.add( Axis(0x00ff00, new THREE.Vector3(0,0,0), 2, 1)); //Y
+				scene.add( Axis(0x0000ff, new THREE.Vector3(Math.PI/2,0,0), 2, 2)); //Z
+				
+				const lightHemisphere = new THREE.HemisphereLight( 0xffffbb, 0x080820, 1 );
+				scene.add( lightHemisphere );
+				
+				const light = new THREE.AmbientLight( 0x404040 ); // soft white light
+				scene.add( light );
+				
+				const loader = new THREE.CubeTextureLoader();
+				const texture = loader.setPath("skybox/").load([
+				  'side.png',
+				  'side.png',
+				  'top.png',
+				  'bottom.png',
+				  'side.png',
+				  'side.png'
+				]);
+				scene.background = texture;
+				
+				const gridHelper = new THREE.GridHelper( 10, 10 );
+				scene.add( gridHelper );
+				
+				CreateScenePart(scene, SceneGraph, RotatingParts);
+				
+				window.MovingGeometry = RotatingParts;
+				window.ThreeJSScene = scene;
+			}
+			
+			function Render(){
+				SceneSetup(GraphGroup.sortable('serialize').get());
+			}
+			
+			function RemoveItem(self){
+				$(self).parent().remove();
+				Render();
+			}
+			
+			function CreateScenePart(ParentElement, RestOfTree, RotationObjects){
+				if(RestOfTree.length == 0 || RestOfTree[0].length == 0) return;
+				
+				RestOfTree[0].forEach(function(entry) {
+					switch(entry.type){
+						case "scale":
+							var object = new THREE.Object3D();
+							var newScale = (typeof entry.scale === 'undefined')? 1 : parseFloat(entry.scale);
+							object.scale.set(newScale, newScale, newScale);
+							ParentElement.add(object);
+							CreateScenePart(object, entry.children, RotationObjects);
+							break;
+						case "rotation":
+							var object = new THREE.Object3D();
+							ParentElement.add(object);
+							RotationObjects.push({"object": object, "speed" : (typeof entry.speed === 'undefined')? 0 : parseFloat(entry.speed)})
+							CreateScenePart(object, entry.children, RotationObjects);
+							break;
+						case "translation":
+							var object = new THREE.Object3D();
+							object.position.x = (typeof entry.x === 'undefined')? 0 : parseFloat(entry.x);
+							object.position.y = (typeof entry.y === 'undefined')? 0 : parseFloat(entry.y);
+							object.position.z = (typeof entry.z === 'undefined')? 0 : parseFloat(entry.z);
+							ParentElement.add(object);
+							CreateScenePart(object, entry.children, RotationObjects);
+							break;
+						case "sphere":
+							var geometry = new THREE.SphereGeometry(1, 50, 50);
+							var material = new THREE.MeshPhongMaterial( {color: entry.color, flatShading: true} );
+							var sphere = new THREE.Mesh(geometry, material);
+							ParentElement.add(sphere);
+							break;
+						case "cube":
+							var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+							var material = new THREE.MeshPhongMaterial( {color: entry.color, flatShading: true} );
+							var cube = new THREE.Mesh( geometry, material );
+							ParentElement.add(cube);
+							break;
+					}
+				});
+			}
+		</script>
+		<style>
+			body.dragging, body.dragging * {
+				cursor: move !important;
+			}
+
+			.dragged {
+				position: absolute;
+				opacity: 0.5;
+				z-index: 2000;
+			}
+			
+			ol {
+				padding-left: 0px;
+				margin: 0px;
+			}
+			
+			ol li {
+				display: block;
+				margin: 5px 0px 5px 5px;
+				padding: 5px 0px 5px 10px;
+				color: black;
+				font-family: sans-serif;
+				background: #eeeeee;
+				border: 1px solid gray;
+				border-radius: 10px;
+				cursor: grab;
+			}
+			
+			ol li[data-type=rotation]    {	background: #fde8cc; }
+			ol li[data-type=translation] {	background: #b5ecb5; }
+			ol li[data-type=scale]       {	background: #dedefb; }
+			ol li[data-type=sphere]      {	background: #eee; }
+			ol li[data-type=cube]        {	background: #eee; }
+			
+			li > ol > li {
+				border-width: 1px 0px 1px 1px;
+				border-radius: 10px 0px 0px 10px;
+			}
+			
+			#Parts > li {
+				border-radius: 10px 0px 0px 10px;
+			}
+
+			.placeholder {
+				border: 2px dashed #ccc !important;
+			}
+			
+			ol:empty {
+				min-height: 10px;
+				margin-top: 5px;
+				border-style: dashed;
+				border-color: gray;
+				border-width: 2px 0px 2px 2px;
+				border-radius: 10px 0px 0px 10px;
+			}
+			
+			html {
+				height: 100%;
+			}
+			
+			body {
+				display: flex;
+				align-items: stretch;
+				height: 100%;
+				width: 100%;
+				box-sizing: border-box;
+				padding: 15px;
+				margin: 0px;
+				align-content: stretch;
+				overflow: hidden;
+				min-width: 900px;
+			}
+			
+			#RenderedView {
+				width: 100% !important;
+				height: 100% !important;
+				border-radius: 5px;
+			}
+			
+			#GraphPane {
+				width: 30%;
+				display: flex;
+				flex-direction: column;
+			}
+			
+			.pane {
+				border: 1px solid gray;
+				padding: 10px;
+				margin: 5px;
+				border-radius: 5px;
+				background: aliceblue;
+			}
+			
+			.heading {
+				font-size: 2em;
+				text-align: center;
+				font-family: sans-serif;
+			}
+			
+			input {
+				width: 50px;
+				border: 1px solid #ccc;
+				border-radius: 5px;
+				padding: 4px;
+				left: 10px;
+				position: relative;
+			}
+			
+			.deleter {
+				float: right;
+				margin-right: 5px;
+				cursor: pointer;
+			}
+			
+			.icon {
+				border: 2px solid #45454e;
+				background: #0078d7;
+				width: 0.9em;
+				height: 0.9em;
+				display: inline-block;
+				position: relative;
+				vertical-align: bottom;
+			}
+			
+			.sphere {
+				border-radius: 50%;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="pane" style="width: 70%">
+			<canvas id="RenderedView">
+			</canvas>
+		</div>
+		<div id="GraphPane">
+			<div class="pane">
+				<div class="heading" style="margin-bottom: 15px;">Available Parts:</div>
+				<ol id="Parts">
+					<li data-type="rotation">&#x1F504&#xFE0F Rotation <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+						<input type="number" value="" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10" disabled></input>
+						<ol></ol>
+					</li>
+					<li data-type="translation">&#x2197&#xFE0F Translation <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+						<input type="number" value="" autocomplete="off" placeholder="X" step="0.5" oninput="ValueChanged(this, 'x')" disabled></input>
+						<input type="number" value="" autocomplete="off" placeholder="Y" step="0.5" oninput="ValueChanged(this, 'y')" disabled></input>
+						<input type="number" value="" autocomplete="off" placeholder="Z" step="0.5" oninput="ValueChanged(this, 'z')" disabled></input>
+						<ol></ol>
+					</li>
+					<li data-type="scale">&#x2194&#xFE0F Scale <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+						<input type="number" value="" autocomplete="off" placeholder="1" step="0.5" oninput="ValueChanged(this, 'scale')" disabled></input>
+						<ol></ol>
+					</li>
+					<li data-type="sphere"><span class="icon sphere"></span> Sphere <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span></li>
+					<li data-type="cube"><span class="icon cube"></span> Cube <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span></li>
+				</ol>
+			</div>
+			<div class="pane" style="flex-grow: 1; overflow-y: scroll;">
+				<div class="heading" style="margin-bottom: 15px; ">Scene Graph:</div>
+				<ol>
+					<li style="background: white;">Root
+						<ol id="SceneGraph">
+							<!-- Example -->
+							<li data-type="rotation" data-speed="90" >🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
+								<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10">
+								<ol>
+									<li data-type="translation" data-x="2">↗️ Translation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
+										<input type="number" value="2" autocomplete="off" placeholder="X" step="0.5" oninput="ValueChanged(this, 'x')">
+										<input type="number" value="" autocomplete="off" placeholder="Y" step="0.5" oninput="ValueChanged(this, 'y')">
+										<input type="number" value="" autocomplete="off" placeholder="Z" step="0.5" oninput="ValueChanged(this, 'z')">
+										<ol>
+											<li data-type="rotation" data-speed="90" >🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
+												<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10">
+												<ol>
+													<li data-type="cube" data-color="#A3DF9F"><span class="icon cube" style="background: rgb(163, 223, 159) none repeat scroll 0% 0%;"></span> Cube <span class="deleter" onclick="RemoveItem(this)">❌️</span></li>
+												</ol>
+											</li>
+										</ol>
+									</li>
+								</ol>
+							</li>
+						</ol>	
+					</li>
+				</ol>
+			</div>
+		</div>
+	</body>
+</html>
