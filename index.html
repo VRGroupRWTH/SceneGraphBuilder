@@ -167,9 +167,9 @@
 					switch(entry.type){
 						case "scale":
 							var object = new THREE.Object3D();
-							var newScaleX = (typeof entry.x === 'undefined')? 1 : parseFloat(entry.x);
-							var newScaleY = (typeof entry.y === 'undefined')? 1 : parseFloat(entry.y);
-							var newScaleZ = (typeof entry.z === 'undefined')? 1 : parseFloat(entry.z);
+							var newScaleX = (typeof entry.x === 'undefined' || entry.x == "")? 1 : parseFloat(entry.x);
+							var newScaleY = (typeof entry.y === 'undefined' || entry.y == "")? 1 : parseFloat(entry.y);
+							var newScaleZ = (typeof entry.z === 'undefined' || entry.z == "")? 1 : parseFloat(entry.z);
 							object.scale.set(newScaleX, newScaleY, newScaleZ);
 							ParentElement.add(object);
 							CreateScenePart(object, entry.children, RotationObjects);
@@ -177,14 +177,14 @@
 						case "rotation":
 							var object = new THREE.Object3D();
 							ParentElement.add(object);
-							RotationObjects.push({"object": object, "speed" : (typeof entry.speed === 'undefined')? 0 : parseFloat(entry.speed)})
+							RotationObjects.push({"object": object, "speed" : (typeof entry.speed === 'undefined' || entry.speed == "")? 0 : parseFloat(entry.speed)})
 							CreateScenePart(object, entry.children, RotationObjects);
 							break;
 						case "translation":
 							var object = new THREE.Object3D();
-							object.position.x = (typeof entry.x === 'undefined')? 0 : parseFloat(entry.x);
-							object.position.y = (typeof entry.y === 'undefined')? 0 : parseFloat(entry.y);
-							object.position.z = (typeof entry.z === 'undefined')? 0 : parseFloat(entry.z);
+							object.position.x = (typeof entry.x === 'undefined' || entry.x == "")? 0 : parseFloat(entry.x);
+							object.position.y = (typeof entry.y === 'undefined' || entry.y == "")? 0 : parseFloat(entry.y);
+							object.position.z = (typeof entry.z === 'undefined' || entry.z == "")? 0 : parseFloat(entry.z);
 							ParentElement.add(object);
 							CreateScenePart(object, entry.children, RotationObjects);
 							break;
