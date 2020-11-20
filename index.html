@@ -58,8 +58,8 @@
 				
 				const loader = new THREE.OBJLoader();
 				loader.load("models/teapot.obj",	function(object){ window.Geometryteapot = object.children[0].geometry; });
-				loader.load("models/smallArm.obj",	function(object){ window.GeometrySmallArm = object.children[0].geometry; });
-				loader.load("models/bigArm.obj",	function(object){ window.GeometryBigArm = object.children[0].geometry; });
+				loader.load("models/smallarm.obj",	function(object){ window.GeometrySmallArm = object.children[0].geometry; });
+				loader.load("models/bigarm.obj",	function(object){ window.GeometryBigArm = object.children[0].geometry; });
 				
 				InitThreeJS();
 				Render();
