@@ -10,6 +10,7 @@
 		<script src='jquery-sortable-min.js'></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r122/three.min.js"></script>
 		<script src="OrbitControls.js"></script>
+		<script src="OBJLoader.js"></script>
 		<script>
 			var GraphGroup;
 			var MovingGeometry = [];
@@ -17,6 +18,8 @@
 		
 			function ValueChanged(Element, PropertyName){
 				$(Element).parent().data(PropertyName, Element.value);
+				$(Element).attr("value", Element.value);
+				$(Element).parent().attr("data-" + PropertyName, Element.value);
 				Render();
 			}
 			
@@ -30,17 +33,18 @@
 					onDragStart: function ($item, container, _super) {
 						if(!container.options.drop){
 							$item.clone(true).insertAfter($item);
-							$item.children('input').each(function () {
+							$item.children('input, select').each(function () {
 								$(this).removeAttr("disabled");
 							});
 							$item.children('.deleter').each(function () {
 								$(this).removeAttr("hidden");
 							});
 							
-							if($item.data("type") == "sphere" || $item.data("type") == "cube"){
+							if($item.data("type") == "geometry"){
 								var color = "#" + new THREE.Color().setHSL(Math.random(), 0.5, 0.75).getHexString();
 								$item.children("span.icon").first().css("background", color);
 								$item.data("color", color);
+								$item.attr("data-color", color);
 							}
 						}
 						_super($item, container);
@@ -52,11 +56,14 @@
 					drop: false
 				});
 				
+				const loader = new THREE.OBJLoader();
+				loader.load("models/teapot.obj",	function(object){ window.Geometryteapot = object.children[0].geometry; });
+				loader.load("models/smallArm.obj",	function(object){ window.GeometrySmallArm = object.children[0].geometry; });
+				loader.load("models/bigArm.obj",	function(object){ window.GeometryBigArm = object.children[0].geometry; });
+				
 				InitThreeJS();
 				Render();
 			});
-			
-			window
 
 			function onWindowResize(){
 
@@ -135,7 +142,7 @@
 				]);
 				scene.background = texture;
 				
-				const gridHelper = new THREE.GridHelper( 10, 10 );
+				const gridHelper = new THREE.GridHelper( 20, 20 );
 				scene.add( gridHelper );
 				
 				CreateScenePart(scene, SceneGraph, RotatingParts);
@@ -160,8 +167,10 @@
 					switch(entry.type){
 						case "scale":
 							var object = new THREE.Object3D();
-							var newScale = (typeof entry.scale === 'undefined')? 1 : parseFloat(entry.scale);
-							object.scale.set(newScale, newScale, newScale);
+							var newScaleX = (typeof entry.x === 'undefined')? 1 : parseFloat(entry.x);
+							var newScaleY = (typeof entry.y === 'undefined')? 1 : parseFloat(entry.y);
+							var newScaleZ = (typeof entry.z === 'undefined')? 1 : parseFloat(entry.z);
+							object.scale.set(newScaleX, newScaleY, newScaleZ);
 							ParentElement.add(object);
 							CreateScenePart(object, entry.children, RotationObjects);
 							break;
@@ -179,17 +188,43 @@
 							ParentElement.add(object);
 							CreateScenePart(object, entry.children, RotationObjects);
 							break;
-						case "sphere":
-							var geometry = new THREE.SphereGeometry(0.5, 50, 50);
-							var material = new THREE.MeshPhongMaterial( {color: entry.color, flatShading: true} );
-							var sphere = new THREE.Mesh(geometry, material);
-							ParentElement.add(sphere);
-							break;
-						case "cube":
-							var geometry = new THREE.BoxGeometry( 1, 1, 1 );
-							var material = new THREE.MeshPhongMaterial( {color: entry.color, flatShading: true} );
-							var cube = new THREE.Mesh( geometry, material );
-							ParentElement.add(cube);
+						case "geometry":
+							var geometry;
+							var wireframe = false;
+							switch(entry.geometry){
+								case "sphere":
+									geometry = new THREE.SphereGeometry(0.5, 20, 20);
+									wireframe = true;
+									break;
+								case "cube":
+									geometry = new THREE.BoxGeometry( 1, 1, 1 );
+									break;
+								case "cone":
+									geometry = new THREE.ConeGeometry( 1, 1, 20 );
+									wireframe = true;
+									break;
+								case "cylinder":
+									geometry = new THREE.CylinderGeometry( 1, 1, 1, 20 );
+									wireframe = true;
+									break;
+								case "torus":
+									geometry = new THREE.TorusGeometry( 1, 0.5, 20, 20 ).rotateX(Math.PI / 2);
+									wireframe = true;
+									break;
+								case "teapot":
+									geometry = Geometryteapot.clone();
+									break;
+								case "smallarm":
+									geometry = GeometrySmallArm.clone();
+									break;
+								case "bigarm":
+									geometry = GeometryBigArm.clone();
+									break;
+							}
+							ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: entry.color, side: THREE.DoubleSide})));
+							if(wireframe){
+								ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: "#000000", side: THREE.DoubleSide, wireframe : true})));
+							}
 							break;
 					}
 				});
@@ -303,6 +338,14 @@
 				position: relative;
 			}
 			
+			select {
+				border: 1px solid #ccc;
+				border-radius: 5px;
+				left: 10px;
+				position: relative;
+				padding: 3px;
+			}
+			
 			.deleter {
 				float: right;
 				margin-right: 5px;
@@ -312,11 +355,12 @@
 			.icon {
 				border: 2px solid #45454e;
 				background: #0078d7;
-				width: 0.9em;
-				height: 0.9em;
+				width: 19px;
+				height: 19px;
 				display: inline-block;
 				position: relative;
-				vertical-align: bottom;
+				vertical-align: sub;
+				box-sizing: border-box;
 			}
 			
 			.sphere {
@@ -344,11 +388,23 @@
 						<ol></ol>
 					</li>
 					<li data-type="scale">&#x2194&#xFE0F Scale <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
-						<input type="number" value="" autocomplete="off" placeholder="1" step="0.5" oninput="ValueChanged(this, 'scale')" disabled></input>
+						<input type="number" value="" autocomplete="off" placeholder="X" step="0.5" oninput="ValueChanged(this, 'x')" disabled></input>
+						<input type="number" value="" autocomplete="off" placeholder="Y" step="0.5" oninput="ValueChanged(this, 'y')" disabled></input>
+						<input type="number" value="" autocomplete="off" placeholder="Z" step="0.5" oninput="ValueChanged(this, 'z')" disabled></input>
 						<ol></ol>
 					</li>
-					<li data-type="sphere"><span class="icon sphere"></span> Sphere <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span></li>
-					<li data-type="cube"><span class="icon cube"></span> Cube <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span></li>
+					<li data-type="geometry" data-geometry="sphere"><span class="icon sphere"></span> Geometry <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+						<select oninput="ValueChanged(this, 'geometry')" disabled autocomplete="off">
+							<option value="bigarm">Big Arm</option>
+							<option value="cone">Cone</option>
+							<option value="cube">Cube</option>
+							<option value="cylinder">Cylinder</option>
+							<option value="smallarm">Small Arm</option>
+							<option value="sphere" selected>Sphere</option>
+							<option value="teapot">Teapot</option>
+							<option value="torus">Torus</option>
+						</select>
+					</li>
 				</ol>
 			</div>
 			<div class="pane" style="flex-grow: 1; overflow-y: scroll;">
@@ -368,7 +424,18 @@
 											<li data-type="rotation" data-speed="90" >🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
 												<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10">
 												<ol>
-													<li data-type="cube" data-color="#A3DF9F"><span class="icon cube" style="background: rgb(163, 223, 159) none repeat scroll 0% 0%;"></span> Cube <span class="deleter" onclick="RemoveItem(this)">❌️</span></li>
+													<li data-type="geometry" data-geometry="cube" data-color="#A3DF9F"><span class="icon sphere" style="background: rgb(163, 223, 159)"></span> Geometry <span class="deleter" onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+														<select oninput="ValueChanged(this, 'geometry')" value="cube" autocomplete="off">
+															<option value="bigarm">Big Arm</option>
+															<option value="cone">Cone</option>
+															<option value="cube" selected>Cube</option>
+															<option value="cylinder">Cylinder</option>
+															<option value="smallarm">Small Arm</option>
+															<option value="sphere">Sphere</option>
+															<option value="teapot">Teapot</option>
+															<option value="torus">Torus</option>
+														</select>
+													</li>
 												</ol>
 											</li>
 										</ol>
