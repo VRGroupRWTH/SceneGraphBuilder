@@ -17,10 +17,15 @@
 			var clock = new THREE.Clock();
 		
 			function ValueChanged(Element, PropertyName){
-				$(Element).parent().data(PropertyName, Element.value);
+				$(Element).closest("li").data(PropertyName, Element.value);
 				$(Element).attr("value", Element.value);
-				$(Element).parent().attr("data-" + PropertyName, Element.value);
+				$(Element).closest("li").attr("data-" + PropertyName, Element.value);
 				Render();
+			}
+			
+			function ColorChange(Element){
+				ValueChanged(Element, 'color')
+				$(Element).closest("span.icon").css("background", Element.value);
 			}
 			
 			$(document).ready(function() {
@@ -33,22 +38,40 @@
 					onDragStart: function ($item, container, _super) {
 						if(!container.options.drop){
 							$item.clone(true).insertAfter($item);
-							$item.children('input, select').each(function () {
+							$item.find('input, select').each(function () {
 								$(this).removeAttr("disabled");
 							});
-							$item.children('.deleter').each(function () {
+							
+							$item.find('.deleter').each(function () {
 								$(this).removeAttr("hidden");
+							});
+							
+							$item.find('.picker').each(function () {
+								var that = this;
+								$(this).dblclick(function () {
+									$(that).find("input[type='color']")[0].click();
+								});
 							});
 							
 							if($item.data("type") == "geometry"){
 								var color = "#" + new THREE.Color().setHSL(Math.random(), 0.5, 0.75).getHexString();
-								$item.children("span.icon").first().css("background", color);
+								$item.find("span.icon").first().css("background", color);
 								$item.data("color", color);
 								$item.attr("data-color", color);
+								$item.find("input[type='color']").first().val(color);
 							}
 						}
 						_super($item, container);
 					}
+				});
+				
+				// Initial setup for color change
+				$("#SceneGraph").find('.picker').each(function () {
+					var that = this;
+					$(this).find("input[type='color']").first().val($(this).closest("li").attr("data-color"));
+					$(this).dblclick(function () {
+						$(that).find("input[type='color']")[0].click();
+					});
 				});
 				
 				var PartsGroup = $("#Parts").sortable({
@@ -97,7 +120,7 @@
 					
 					var DeltaTime = clock.getDelta();
 					MovingGeometry.forEach(function(entry) {
-						entry.object.rotation.y += THREE.Math.DEG2RAD * (DeltaTime * entry.speed);
+						entry.object.rotation[entry.axis] += THREE.Math.DEG2RAD * (DeltaTime * entry.speed);
 					});
 					
 					controls.update();
@@ -177,7 +200,7 @@
 						case "rotation":
 							var object = new THREE.Object3D();
 							ParentElement.add(object);
-							RotationObjects.push({"object": object, "speed" : (typeof entry.speed === 'undefined' || entry.speed == "")? 0 : parseFloat(entry.speed)})
+							RotationObjects.push({"object": object, "speed" : (typeof entry.speed === 'undefined' || entry.speed == "")? 0 : parseFloat(entry.speed), "axis" : entry.axis})
 							CreateScenePart(object, entry.children, RotationObjects);
 							break;
 						case "translation":
@@ -191,7 +214,13 @@
 						case "geometry":
 							var geometry;
 							var wireframe = false;
+							var shading = true;
 							switch(entry.geometry){
+								case "point":
+									geometry = new THREE.SphereGeometry(0.05, 20, 20);
+									wireframe = false;
+									shading = false;
+									break;
 								case "sphere":
 									geometry = new THREE.SphereGeometry(1, 20, 20);
 									wireframe = true;
@@ -221,7 +250,11 @@
 									geometry = GeometryBigArm.clone();
 									break;
 							}
-							ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: entry.color, side: THREE.DoubleSide})));
+							if(shading){
+								ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: entry.color, side: THREE.DoubleSide})));
+							} else {
+								ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color: entry.color, side: THREE.DoubleSide})));
+							}
 							if(wireframe){
 								ParentElement.add(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: "#000000", side: THREE.DoubleSide, wireframe : true})));
 							}
@@ -334,22 +367,28 @@
 				border: 1px solid #ccc;
 				border-radius: 5px;
 				padding: 4px;
-				left: 10px;
+				margin: 0px 2px;
 				position: relative;
+				background-color: #FFFFFF;
 			}
 			
 			select {
 				border: 1px solid #ccc;
 				border-radius: 5px;
-				left: 10px;
+				margin: 0px 2px;
 				position: relative;
 				padding: 3px;
+				background-color: #FFFFFF;
 			}
 			
 			.deleter {
 				float: right;
 				margin-right: 5px;
 				cursor: pointer;
+			}
+			
+			.no-break {
+				display: inline-block;
 			}
 			
 			.icon {
@@ -361,6 +400,7 @@
 				position: relative;
 				vertical-align: sub;
 				box-sizing: border-box;
+				cursor: pointer;
 			}
 			
 			.sphere {
@@ -377,8 +417,20 @@
 			<div class="pane">
 				<div class="heading" style="margin-bottom: 15px;">Available Parts:</div>
 				<ol id="Parts">
-					<li data-type="rotation">&#x1F504&#xFE0F Rotation <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
-						<input type="number" value="" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10" disabled></input>
+					<li data-type="rotation" data-axis="y">&#x1F504&#xFE0F Rotation <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+						<span class="no-break">
+							around
+							<select oninput="ValueChanged(this, 'axis')" disabled autocomplete="off">
+								<option value="x">X</option>
+								<option value="y" selected>Y</option>
+								<option value="z">Z</option>
+							</select>
+							at
+						</span>
+						<span class="no-break">
+							<input type="number" value="" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10" disabled></input>
+							°/sec
+						</span>
 						<ol></ol>
 					</li>
 					<li data-type="translation">&#x2197&#xFE0F Translation <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
@@ -393,12 +445,13 @@
 						<input type="number" value="" autocomplete="off" placeholder="Z" step="0.5" oninput="ValueChanged(this, 'z')" disabled></input>
 						<ol></ol>
 					</li>
-					<li data-type="geometry" data-geometry="sphere"><span class="icon sphere"></span> Geometry <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+					<li data-type="geometry" data-geometry="sphere"><span class="icon sphere picker" style="background: rgb(163, 223, 159)"><input name="color" type="color" onchange="ColorChange(this, 'color')" hidden/></span> Geometry <span class="deleter" hidden onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
 						<select oninput="ValueChanged(this, 'geometry')" disabled autocomplete="off">
 							<option value="bigarm">Big Arm</option>
 							<option value="cone">Cone</option>
 							<option value="cube">Cube</option>
 							<option value="cylinder">Cylinder</option>
+							<option value="point">Point</option>
 							<option value="smallarm">Small Arm</option>
 							<option value="sphere" selected>Sphere</option>
 							<option value="teapot">Teapot</option>
@@ -413,23 +466,48 @@
 					<li style="background: white;">Root
 						<ol id="SceneGraph">
 							<!-- Example -->
-							<li data-type="rotation" data-speed="90" >🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
-								<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10">
+							<li data-type="rotation" data-speed="90" data-axis="y">🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
+								<span class="no-break">
+									around
+									<select oninput="ValueChanged(this, 'axis')" autocomplete="off">
+										<option value="x">X</option>
+										<option value="y" selected>Y</option>
+										<option value="z">Z</option>
+									</select>
+									at
+								</span>
+								<span class="no-break">
+									<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10"></input>
+									°/sec
+								</span>
 								<ol>
 									<li data-type="translation" data-x="2">↗️ Translation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
 										<input type="number" value="2" autocomplete="off" placeholder="X" step="0.5" oninput="ValueChanged(this, 'x')">
 										<input type="number" value="" autocomplete="off" placeholder="Y" step="0.5" oninput="ValueChanged(this, 'y')">
 										<input type="number" value="" autocomplete="off" placeholder="Z" step="0.5" oninput="ValueChanged(this, 'z')">
 										<ol>
-											<li data-type="rotation" data-speed="90" >🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
-												<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10">
+											<li data-type="rotation" data-speed="90" data-axis="y">🔄️ Rotation <span class="deleter" onclick="RemoveItem(this)">❌️</span>
+												<span class="no-break">
+													around
+													<select oninput="ValueChanged(this, 'axis')" autocomplete="off">
+														<option value="x">X</option>
+														<option value="y" selected>Y</option>
+														<option value="z">Z</option>
+													</select>
+													at
+												</span>
+												<span class="no-break">
+													<input type="number" value="90" autocomplete="off" placeholder="°/sec" oninput="ValueChanged(this, 'speed')" step="10"></input>
+													°/sec
+												</span>
 												<ol>
-													<li data-type="geometry" data-geometry="cube" data-color="#A3DF9F"><span class="icon sphere" style="background: rgb(163, 223, 159)"></span> Geometry <span class="deleter" onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
+													<li data-type="geometry" data-geometry="cube" data-color="#A3DF9F"><span class="icon sphere picker" style="background: rgb(163, 223, 159)"><input name="color" type="color" onchange="ColorChange(this, 'color')" hidden/></span> Geometry <span class="deleter" onclick="RemoveItem(this)">&#x274C&#xFE0F</span>
 														<select oninput="ValueChanged(this, 'geometry')" value="cube" autocomplete="off">
 															<option value="bigarm">Big Arm</option>
 															<option value="cone">Cone</option>
 															<option value="cube" selected>Cube</option>
 															<option value="cylinder">Cylinder</option>
+															<option value="point">Point</option>
 															<option value="smallarm">Small Arm</option>
 															<option value="sphere">Sphere</option>
 															<option value="teapot">Teapot</option>
